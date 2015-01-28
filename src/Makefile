@@ -14,7 +14,7 @@ htsss.hex: htsss.elf
 	avr-objcopy -O ihex $< $@
 
 OBJECTS= # Put other objects here
-htsss.elf: htsss.c $(OBJECTS)
+htsss.elf: htsss.cpp $(OBJECTS)
 	$(CXX) $(CFLAGS) $(INCLUDE) $^ -o $@ $(LIBS)
 
 upload:
@@ -27,5 +27,5 @@ clean:
 	$(shell rm *.o 2> /dev/null)
 	@echo " done"
 
-%.o: %.c
+%.o: %.cpp
 	$(CXX) $< $(CFLAGS) $(INCLUDE) -c -o $@

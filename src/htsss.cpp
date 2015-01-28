@@ -6,26 +6,46 @@
 //
 // Copyright © 2015 Arvid Juskaitis arvydas.juskaitis@gmail.com
 //
+//
+// Board - sensor wiring
+// =====================
+//
+// Hitec Optima 7/9 receiver - I2C
+// -------------------------------
+// A4 - SDA
+// A5 - SCL
+//
+// Barometer GY-63/MS561101BA - SPI
+// --------------------------------
+// IO11 - MOSI
+// IO12 - MISO
+// IO13 - SCK 
+//
+// Current ACS712ELC-30A - ADC
+// ---------------------------
+// A0 - OUT
+//
+// Voltage w/ divider 1/5.3917 - ADC
+// ---------------------------------
+// A1 - OUT
+//
+// Temperatrure LM335 - ADC
+// ------------------------
+// A2 - OUT
+//
 // v0.1
-// Initial release. Supports I2C communication with Optima 7/9, can report voltage, amperage.
+// Initial release. Supports I2C communication with Optima 7/9, can report voltage, current.
 //
 
 #include <util/twi.h>
 #include <util/delay.h>
 #include <WProgram.h>
 
-#ifndef F_CPU
-#define F_CPU   16000000UL  /* used in prescale factor calculations */
-#endif
-#ifndef VCC
-#define VCC 5.0             /* used as ADC reference */
-#endif
-
 #define HITEC_I2C_ADDRESS   0x08    /* Optima 7/9 talks to this slave */
-#define ADC_REFERENCE (1 << 6)      /* AVcc=5v REFS1=0, REFS0=1 */
+#define ADC_REFERENCE (1 << 6)      /* AVcc - REFS1=0, REFS0=1 */
 
 #define ADC_I_IN    0  /* ADC channel for voltage */
-#define ADC_U_IN    1  /* ADC channel for amperage */
+#define ADC_U_IN    1  /* ADC channel for current */
 #define ADC_T_IN    2  /* ADC channel for temperature */
 
 uint16_t zero_current_ref = 0;
@@ -48,7 +68,7 @@ char data[8][7] = {
   { 0x16, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16 }, 
   // 3 - GPS signal, 4 - Temp3, 5 - Temp4
   { 0x17, 0x00, 0x00, 0x00, 0x00, 0x00, 0x17 }, 
-  // 1-2 - Voltage, 3-4 - Amperage
+  // 1-2 - Voltage, 3-4 - Current
   { 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18 }
 }; 
 
@@ -93,17 +113,11 @@ void setup() {
 
   sei();
 
-  // Read current
+  // Read reference current
+  read_adc(ADC_I_IN);	// discard 1st result
   zero_current_ref = read_adc(ADC_I_IN);
-/*
-  Serial.begin(9600);
 
-  for (int i = 0 ; i < 6; i ++) {
-  Serial.print(i);
-  Serial.print(": ");
-  Serial.println(read_adc(i));
-  }
-*/  
+//  Serial.begin(115200);
 }
 
 // 
@@ -112,6 +126,23 @@ void setup() {
 void loop() {
   uint16_t value;
 
+  // Measure Current. The ACS712ELC-30A gives 66mV/A. 
+  // At 0 (zero) amp this sensor gives Vcc/2. 
+  // Amp value is sent to Hitec in Amps * 10 format.
+  // (1/2^10)*3.3/0.066*10 = 0.48828f
+  // (1/2^10)*5.0/0.066*10 = 0.73982f
+  value = read_adc(ADC_I_IN);
+  value = (value > zero_current_ref) ? value - zero_current_ref : 0;
+  set_current((uint16_t)(value * 0.73982f));
+
+  // ADC conversion. ADC_U_IN divided by 5.3917
+  // Uin value is sent to Hitec in Uin * 10 format.
+  // A9 expects ADC_U_IN times 10. So
+  // (3.3*5.3917*10)/2^10 = 0.173755f
+  // (5.0*5.3917*10)/2^10 = 0.263266f
+  set_voltage((uint8_t)(read_adc(ADC_U_IN) * 0.263266f));
+
+/*
   // Calculate temperature. LM335 is connected to PC3 by R/2R divider
   // LM335 gives 10mV/K so with R/2R divider and Uref = 3.3V: 
   // U(lm335) = 2 * (3.3/1024) * adc
@@ -123,37 +154,15 @@ void loop() {
   set_temp(2, (uint8_t)((value * 0.6445f) - 273.15f));
   set_temp(3, (uint8_t)((value * 0.6445f) - 273.15f));
   set_temp(4, (uint8_t)((value * 0.6445f) - 273.15f));
-
-  // ADC conversion
-  // ADC_U_IN1 divided by 1k/(1k+10k). Uref = 3.3V
-  // A9 expects ADC_U_IN times 10. So
-  // Uin = adc * (3.3 * 11 * 10)/2^10	= adc * 0.3545f	
-//float voltage = read_adc(1) * (4.83 * 5.3917 / 1023.0);
-  set_voltage((uint8_t)(read_adc(ADC_U_IN) * 0.3545f));
-
-  // Measure Current. The ACS756 gives 40mV/Amp. At 0 (zero)
-  // amp this sensor goves Vcc/2. This 0 A value is measured
-  // at powerup to compensate Vcc fluctuations.
-  // Amps are send to A9 in Amps*10 format.
-  // ACS712ELC-30A  66mV / A;
-  // 
-  // ((1/2^10)*3.3)/0.066 = 0.048828 with Uref=3.3v
-  // ((1/2^10)*5.0)/0.066 = 0.073982 with Uref=5.0v
-  //
-  // Note that Uref = 3.3 meaning ADC clips at approx 23 Amp. Use
-  // Uref = 5 V for greater range.
-  value = read_adc(ADC_I_IN);
-  value -= zero_current_ref;
-//float amperage = (read_adc(0) - zeroref) * 15.151 * (4.83 / 1023.0);
-  set_current((uint16_t)((value * 0.80566f) + 0.5f));
   
-  
+  set_speed(100);
+  set_altitude(1000);
+*/
   set_rpm(1, 500);
   set_rpm(2, 1500);
   set_fuel_gauge(3);
-  set_speed(100);
-  set_altitude(1000);
-  
+
+  delay(300);
 }
 
 //
@@ -200,7 +209,6 @@ ISR(TWI_vect, ISR_BLOCK) {
     break;
   }
 }
-
 
 //
 // Select channel, start ADC and return value
@@ -282,7 +290,6 @@ void set_altitude(uint16_t value) {
   data[3][4] = (uint8_t)(value >> 8);    // msb
 }
 
-
 //
 // Set fuel gauge value in array
 //
@@ -290,27 +297,26 @@ void set_fuel_gauge(uint8_t value) {
   data[4][1] = value;
 }
 
-
 //
 // Set voltage value in array
 //
 void set_voltage(uint16_t value)
 {
+  value -= 2;	// compensate .2v
   data[7][1] = (uint8_t)(value & 0xFF);  // lsb	
   data[7][2] = (uint8_t)(value >> 8);    // msb
 }
 
-
 //
-// Set current value in array
+// Set current value in array.
 //
 void set_current(uint16_t value)
 {
-  uint16_t val = (((value + 114.875) * 1.441)+0.5);
+  // calculate current in A9 units
+  uint16_t val = ((value + 114.875) * 1.441);	
   data[7][3] = (uint8_t)(val & 0xFF);	// lsb
-  data[7][4] = (uint8_t)(val>>8);	// msb
+  data[7][4] = (uint8_t)(val >> 8);	// msb
 }
-
 
 //
 // Substitute for Arduino main()
