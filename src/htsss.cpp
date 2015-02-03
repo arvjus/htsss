@@ -51,7 +51,7 @@ voltage, current.
 #define ADC_T_IN    2  /* ADC channel for temperature */
 
 #define MIN_CELL_VOLTAGE    32      /* Min voltage per cell * 10 */
-#define CUT_OFF_VOLTAGE     35      /* Cut-off voltage per cell * 10 */
+#define CUT_OFF_VOLTAGE     33      /* Cut-off voltage per cell * 10 */
 #define FULL_CHARGED_CELL   41      /* Max voltage per cell * 10 */
 
 uint16_t zero_current_ref = 0;
@@ -173,9 +173,12 @@ void loop() {
    Set 0 if voltage is just about to drop to cut-off voltage 
    and 4 if battery is full charged.
    */
-  uint8_t voltage_per_cell = value / number_of_battery_cells;
-  set_fuel_gauge(3);
-
+  float voltage_per_cell = value / number_of_battery_cells;
+  uint8_t fuel_gauge = ((voltage_per_cell - CUT_OFF_VOLTAGE) / 
+      (FULL_CHARGED_CELL - CUT_OFF_VOLTAGE) * 4);
+  if (fuel_gauge < 0) fuel_gauge = 0;
+  if (fuel_gauge > 4) fuel_gauge = 4;
+  set_fuel_gauge((uint8_t)fuel_gauge);
 
 
 /*
