@@ -2,9 +2,13 @@ CXX=avr-gcc
 INCLUDE=-I ~/include/arduino/
 LIBS=-L ~/lib -lm -larduino
 MCU=-mmcu=atmega328p
-CPU_SPEED=-DF_CPU=16000000UL
+CPU_SPEED=-DF_CPU=8000000UL
 CFLAGS=$(MCU) $(CPU_SPEED) -Os -w -Wl,--gc-sections -ffunction-sections -fdata-sections
-PORT=/dev/ttyUSB0
+PORT=/dev/tty.usbserial-A600acii
+ifeq ($(shell uname),Linux)
+	PORT=/dev/ttyUSB0
+endif
+
 
 default: build upload
 
@@ -18,7 +22,7 @@ htsss.elf: htsss.cpp $(OBJECTS)
 	$(CXX) $(CFLAGS) $(INCLUDE) $^ -o $@ $(LIBS)
 
 upload:
-	avrdude -V -F -p m328p -c arduino -b 115200 -Uflash:w:htsss.hex -P$(PORT)
+	avrdude -V -F -p atmega328p -c arduino -b 57600 -Uflash:w:htsss.hex -P$(PORT)
 
 clean:
 	@echo -n Cleaning ...

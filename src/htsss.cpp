@@ -1,5 +1,5 @@
 /**************************************************************************
-Firmware for Arduino Uno compatible boards (ATMega328p)
+Firmware for Arduino Mini Pro compatible boards (ATMega328p 8MHz)
 This HW/SW is developed as a replacement for proprietary Hitec HTS-SS sensor station.
 
 Controller measures altitude, current, voltage, temperature and sends to 
@@ -130,15 +130,15 @@ void setup() {
 
   // Detect number of cells - 2/3/4s
   // see loop(), ADC conversion for ADC_U_IN
-  uint8_t voltage = (uint8_t)(read_adc(ADC_U_IN) * 0.263266f);
-  for (int i = 2; i < 5; i++) {
-    if (voltage >= 2 * MIN_CELL_VOLTAGE) {
+  uint8_t voltage = (uint8_t)(read_adc(ADC_U_IN) * 0.173755f);
+  for (int i = 5; i > 0; i--) {
+    if (voltage >= i * MIN_CELL_VOLTAGE) {
       number_of_battery_cells = i;
       break;
     }
   }
 
-//  Serial.begin(115200);
+  Serial.begin(115200);
 }
 
 /**************************************************************************
@@ -165,7 +165,7 @@ void loop() {
    (3.3*5.3917*10)/2^10 = 0.173755f
    (5.0*5.3917*10)/2^10 = 0.263266f
    */
-  value = (uint8_t)(read_adc(ADC_U_IN) * 0.263266f);
+  value = (uint8_t)(read_adc(ADC_U_IN) * 0.173755f);
   set_voltage(value);
 
   /*** 
@@ -174,7 +174,7 @@ void loop() {
    and 4 if battery is full charged.
    */
   float voltage_per_cell = value / number_of_battery_cells;
-  uint8_t fuel_gauge = ((voltage_per_cell - CUT_OFF_VOLTAGE) / 
+  int8_t fuel_gauge = ((voltage_per_cell - CUT_OFF_VOLTAGE) / 
       (FULL_CHARGED_CELL - CUT_OFF_VOLTAGE) * 4);
   if (fuel_gauge < 0) fuel_gauge = 0;
   if (fuel_gauge > 4) fuel_gauge = 4;
@@ -329,17 +329,13 @@ void set_altitude(uint16_t value) {
 }
 
 /**************************************************************************
- * Set fuel gauge value in array
- **************************************************************************/
-void set_fuel_gauge(uint8_t value) {
-  data[4][1] = value;
-}
-
-/**************************************************************************
  * Set voltage value in array
  **************************************************************************/
 void set_voltage(uint16_t value)
 {
+Serial.print(value);
+Serial.print("v, ");
+
   value -= 2;	// compensate .2v
   data[7][1] = (uint8_t)(value & 0xFF);  // lsb	
   data[7][2] = (uint8_t)(value >> 8);    // msb
@@ -350,10 +346,24 @@ void set_voltage(uint16_t value)
  **************************************************************************/
 void set_current(uint16_t value)
 {
+Serial.print(value);
+Serial.print("a, ");
+
   // calculate current in A9 units
   uint16_t val = ((value + 114.875) * 1.441);	
   data[7][3] = (uint8_t)(val & 0xFF);	// lsb
   data[7][4] = (uint8_t)(val >> 8);	// msb
+}
+
+/**************************************************************************
+ * Set fuel gauge value in array
+ **************************************************************************/
+void set_fuel_gauge(uint8_t value) {
+Serial.print(number_of_battery_cells);
+Serial.print("s, gauge:");
+Serial.println((uint16_t)value);
+
+  data[4][1] = value;
 }
 
 /**************************************************************************
