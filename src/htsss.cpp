@@ -1,7 +1,5 @@
 /**************************************************************************
-htsss v0.1
-
-Firmware for Arduino Mini Pro compatible boards (ATMega328p 8MHz)
+htsss v0.1 - Firmware for Arduino Mini Pro compatible boards (ATMega328p 8MHz)
 This HW/SW is developed as a replacement for proprietary Hitec HTS-SS sensor station.
 
 Controller measures altitude, current, voltage, temperature and sends to 
