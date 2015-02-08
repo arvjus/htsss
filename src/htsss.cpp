@@ -1,5 +1,5 @@
 /**************************************************************************
-htsss v0.1 - Firmware for Arduino Mini Pro compatible boards (ATMega328p 8MHz)
+htsss v0.2 - Firmware for Arduino Mini Pro compatible boards (ATMega328p 8MHz)
 This HW/SW is developed as a replacement for proprietary Hitec HTS-SS sensor station.
 
 Controller measures altitude, current, voltage, temperature and sends to
@@ -36,6 +36,9 @@ CSB/SS - D10  // PORTB 2bit
 MOSI   - D11  // PORTB 3bit
 MISO   - D12  // PORTB 4bit
 SCK    - D13  // PORTB 5bit
+
+v0.2 - 2015-02-08
+Added altimeter support.
 
 v0.1 - 2015-02-03
 Initial release. Supports I2C communication with Optima 7/9, can report
@@ -84,7 +87,7 @@ voltage, current, fuel gauge.
 #define MS5611_ADC_1024    0x04 // ADC OSR=1024 
 #define MS5611_ADC_2048    0x06 // ADC OSR=2056
 #define MS5611_ADC_4096    0x08 // ADC OSR=4096
-#define MS5611_PROM_READ   0xA0 // Prom read command
+#define MS5611_PROM_READ   0xA2 // Prom read command
 
 #define ms5611_csb_lo() (_SFR_BYTE(PORTB) &= ~_BV(2))  // setting CSB low
 #define ms5611_csb_hi() (_SFR_BYTE(PORTB) |=  _BV(2))  // setting CSB high
@@ -120,7 +123,7 @@ char data[8][7] = {
 /**************************************************************************
  * MS561101BA calibration coefficients
  **************************************************************************/
-uint16_t C[7];
+uint16_t C1, C2, C3, C4, C5, C6;
 
 
 /**************************************************************************
@@ -163,21 +166,21 @@ void setup() {
      */
 
     // Enable ADC, set prescale factor to 64, 8Mhz / 64 = 125Khz
-    ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1);
+    ADCSRA = _BV(ADEN) | _BV(ADPS2) | _BV(ADPS1);
 
 
     /***
      * Init SPI
      */
 
-    // SPI settings: master, mode 0, fosc/4
-    SPCR = (1 << SPE) | (1 << MSTR);
-
     // Define CSK, MOSI and CSB pins as output, MISO as input
-    DDRB = (1 << 5) | (1 << 3) | (1 << 2);
+    DDRB = _BV(5) | _BV(3) | _BV(2);
 
-    // Pull SCK and MOSI low, SS high.
-    PORTB = (1 << 2);
+    // Pull SCK and MOSI low, CSB high.
+    PORTB = _BV(2);
+
+    // SPI settings: master, mode 0, fosc/4
+    SPCR = _BV(SPE) | _BV(MSTR);
 
     sei();
 
@@ -197,13 +200,17 @@ void setup() {
 
     // Reset SPI, read calibration coeficients
     reset_ms5611();
-    for (int i = 0; i < 8; i++)
-        C[i] = read_ms5611_prom(i);
+    C1 = read_ms5611_prom(MS5611_PROM_READ);
+    C2 = read_ms5611_prom(MS5611_PROM_READ + 2);
+    C3 = read_ms5611_prom(MS5611_PROM_READ + 4);
+    C4 = read_ms5611_prom(MS5611_PROM_READ + 6);
+    C5 = read_ms5611_prom(MS5611_PROM_READ + 8);
+    C6 = read_ms5611_prom(MS5611_PROM_READ + 10);
 
     // Read initial altitude
     ground_altitude = calculate_altitude();
 
-//#define TRACE 1
+#define TRACE 1
 #ifdef TRACE
     Serial.begin(115200);
 #endif
@@ -270,6 +277,9 @@ void loop() {
     set_rpm(1, 1200);
     set_rpm(2, 1500);
 
+#ifdef TRACE
+    Serial.println("");
+#endif
     _delay_ms(300);
 }
 
@@ -359,12 +369,12 @@ uint16_t read_adc(uint8_t ch) {
 /**************************************************************************
  * Send 8 bit using SPI
  **************************************************************************/
-void spi_send(uint8_t cmd) {
+void spi_send(uint8_t data) {
     // put the byte in the SPI hardware buffer and start sending
-    SPDR = cmd;
+    SPDR = data;
 
     // wait that the data is sent
-    while (!(SPSR & (1 << SPIF)))
+    while (!(SPSR & _BV(SPIF)))
         ;
 }
 
@@ -381,15 +391,17 @@ void reset_ms5611() {
 /**************************************************************************
  * Read MS561101BA PROM
  **************************************************************************/
-uint16_t read_ms5611_prom(uint8_t coef_num) {
+uint16_t read_ms5611_prom(uint8_t cmd) {
     uint16_t ret;
+
     ms5611_csb_lo();
-    spi_send(MS5611_PROM_READ - coef_num * 2);  // Send PROM READ command
-    spi_send(0x00);                             // Send 0 to read MSB
-    ret = (SPDR << 8);
-    spi_send(0x00);                             // Send 0 to read LSB
-    ret += SPDR;
+    spi_send(cmd);					// Send PROM READ command
+    spi_send(0x00);    				// Send 0 to read MSB
+    ret = ((uint16_t)SPDR << 8);
+    spi_send(0x00);     			// Send 0 to read LSB
+    ret |= SPDR;
     ms5611_csb_hi();
+
     return ret;
 }
 
@@ -405,15 +417,15 @@ uint32_t read_ms5611(uint8_t cmd) {
     _delay_ms(10);
     ms5611_csb_hi();
 
-    // start reading
+    // start reading 24 bit result
     ms5611_csb_lo();
     spi_send(MS5611_ADC_READ);
     spi_send(0x00);
-    ret = (SPDR << 16);
+    ret = (((uint32_t)SPDR) << 16);
     spi_send(0x00);
-    ret += (SPDR << 8);
+    ret |= (((uint32_t)SPDR) << 8);
     spi_send(0x00);
-    ret += SPDR;
+    ret |= SPDR;
     ms5611_csb_hi();
 
     return ret;
@@ -421,31 +433,42 @@ uint32_t read_ms5611(uint8_t cmd) {
 
 
 /**************************************************************************
- * Read pressure, temperature, calculate altitude
+ * Read pressure, temperature, calculate altitude - returns m/100 units
  **************************************************************************/
 uint32_t calculate_altitude() {
     const float sea_press = 1013.25;
-    uint32_t D1;    // ADC value of the pressure conversion
-    uint32_t D2;    // ADC value of the temperature conversion
-    double P;       // difference between actual and measured temperature
-    double T;       // compensated temperature value
-    double dT;      // difference between actual and measured temperature
-    double OFF;     // offset at actual temperature
-    double SENS;    // sensitivity at actual temperature
+    uint32_t D1;   // ADC value of the pressure conversion
+    uint32_t D2;   // ADC value of the temperature conversion
+    float P;       // difference between actual and measured temperature
+    float T;       // compensated temperature value
+    float dT;      // difference between actual and measured temperature
+    float OFF;     // offset at actual temperature
+    float SENS;    // sensitivity at actual temperature
 
     D1 = read_ms5611(MS5611_ADC_D1 + MS5611_ADC_4096);  // read uncompensated pressure
     D2 = read_ms5611(MS5611_ADC_D2 + MS5611_ADC_4096);  // read uncompensated temperature
 
     // Apply MS5611 1st order algorithm
-    dT   = D2 - C[5] * pow(2,8);
-    OFF  = C[2] * pow(2,17) + dT * C[4] / pow(2,6);
-    SENS = C[1] * pow(2,16) + dT * C[3] / pow(2,7);
-    T    = (2000 + (dT * C[6]) / pow(2,23)) / 100;
-    P    = (((D1 * SENS) / pow(2,21) - OFF) / pow(2,15)) / 100;
+    dT = D2 - (((uint32_t)C5) << 8);
+    T = (dT * C6) / 8388608;
+    OFF = C2 * 65536.0 + (C4 * dT) / 128;
+    SENS = C1 * 32768.0 + (C3 * dT) / 256;
+    if (T < 0) {
+        // 2nd order temperature compensation when under 20 degrees C
+        float T2 = (dT * dT) / 0x80000000;
+        float Aux = T * T;
+        float OFF2 = 2.5 * Aux;
+        float SENS2 = 1.25 * Aux;
+        T -= T2;
+        OFF -= OFF2;
+        SENS -= SENS2;
+    }
+    T = (T + 2000) / 100;
+    P = (D1 * SENS / 2097152 - OFF) / 32768 / 100;
 
     // Calculate altitude
     // return (1.0f - pow(P/101325.0f, 0.190295f)) * 4433000.0f;
-    return ((pow((sea_press / P), 1/5.257) - 1.0) * (T + 273.15)) / 0.0065;
+    return ((pow((sea_press / P), 1/5.257) - 1.0) * (T + 273.15)) / 0.000065;
 }
 
 
@@ -517,7 +540,10 @@ void set_temp(uint8_t nr, uint8_t value) {
 void set_altitude(uint16_t value) {
 #ifdef TRACE
     Serial.print(", altitude:");
-    Serial.print(value);
+    Serial.print(value / 100);
+    Serial.print(".");
+    Serial.print(value % 100);
+    Serial.print("m");
 #endif
     data[3][3] = (uint8_t)(value & 0xFF);  // lsb
     data[3][4] = (uint8_t)(value >> 8);    // msb
