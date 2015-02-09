@@ -49,16 +49,16 @@
 #include <util/delay.h>
 #include "WProgram.h"
 
-#define HITEC_I2C_ADDRESS   0x08    /* Optima 7/9 talks to this slave */
-#define ADC_REFERENCE (1 << 6)      /* AVcc - REFS1=0, REFS0=1 */
+#define HITEC_I2C_ADDRESS   0x08    // Optima 7/9 talks to this slave
+#define ADC_REFERENCE (1 << 6)      // AVcc - REFS1=0, REFS0=1
 
-#define ADC_I_IN    0               /* ADC channel for voltage */
-#define ADC_U_IN    1               /* ADC channel for current */
-#define ADC_T_IN    2               /* ADC channel for temperature */
+#define ADC_I_IN    0               // ADC channel for voltage
+#define ADC_U_IN    1               // ADC channel for current
+#define ADC_T_IN    2               // ADC channel for temperature
 
-#define MIN_CELL_VOLTAGE    32      /* Min voltage per cell * 10 */
-#define CUT_OFF_VOLTAGE     33      /* Cut-off voltage per cell * 10 */
-#define FULL_CHARGED_CELL   41      /* Max voltage per cell * 10 */
+#define MIN_CELL_VOLTAGE    32      // Min voltage per cell * 10
+#define CUT_OFF_VOLTAGE     33      // Cut-off voltage per cell * 10
+#define FULL_CHARGED_CELL   41      // Max voltage per cell * 10
 
 /*
  ADC conversion, 10bit resolution. ACS712ELC-30A gives 66mV/A.
@@ -77,17 +77,17 @@
 /*
  GY-63/MS561101BA definitions for SPI
  */
-#define MS5611_RESET       0x1E // ADC reset command
-#define MS5611_ADC_READ    0x00 // ADC read command
-#define MS5611_ADC_CONV    0x40 // ADC conversion command
-#define MS5611_ADC_D1      0x00 // ADC D1 conversion 
-#define MS5611_ADC_D2      0x10 // ADC D2 conversion
-#define MS5611_ADC_256     0x00 // ADC OSR=256
-#define MS5611_ADC_512     0x02 // ADC OSR=512
-#define MS5611_ADC_1024    0x04 // ADC OSR=1024 
-#define MS5611_ADC_2048    0x06 // ADC OSR=2056
-#define MS5611_ADC_4096    0x08 // ADC OSR=4096
-#define MS5611_PROM_READ   0xA2 // Prom read command
+#define MS5611_RESET       0x1E		// ADC reset command
+#define MS5611_ADC_READ    0x00		// ADC read command
+#define MS5611_ADC_CONV    0x40		// ADC conversion command
+#define MS5611_ADC_D1      0x00		// ADC D1 conversion
+#define MS5611_ADC_D2      0x10		// ADC D2 conversion
+#define MS5611_ADC_256     0x00		// ADC OSR=256
+#define MS5611_ADC_512     0x02		// ADC OSR=512
+#define MS5611_ADC_1024    0x04		// ADC OSR=1024
+#define MS5611_ADC_2048    0x06		// ADC OSR=2056
+#define MS5611_ADC_4096    0x08		// ADC OSR=4096
+#define MS5611_PROM_READ   0xA2		// Prom read command
 
 #define ms5611_csb_lo() (_SFR_BYTE(PORTB) &= ~_BV(2))  // setting CSB low
 #define ms5611_csb_hi() (_SFR_BYTE(PORTB) |=  _BV(2))  // setting CSB high
@@ -100,22 +100,23 @@ uint16_t ground_altitude = 0;
  * Message block, to send to Optima 7/9 by I2C
  **************************************************************************/
 char data[8][7] = {
-// 1 - Frametype, 4-5 - Internal SPC voltage
-		{ 0x11, 0xAF, 0x00, 0x2D, 0x00, 0x00, 0x11 },
-		// 1-4 - Latitude, 5 - GPS sec
-		{ 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x12 },
-		// 1-4 - Longitude, 5 - TEMP2
-		{ 0x13, 0x00, 0x00, 0x00, 0x00, 0x00, 0x13 },
-		// 1-2 - Speed, 3-4 - Altitude, 5 - Temp1
-		{ 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x14 },
-		// 1 - Fuelgauge, 2-3 - RPM1, 4-5 - RPM2
-		{ 0x15, 0x00, 0x00, 0x00, 0x00, 0x00, 0x15 },
-		// GPS year, month, day, hour, min
-		{ 0x16, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16 },
-		// 3 - GPS signal, 4 - Temp3, 5 - Temp4
-		{ 0x17, 0x00, 0x00, 0x00, 0x00, 0x00, 0x17 },
-		// 1-2 - Voltage, 3-4 - Current
-		{ 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18 } };
+	// 1 - Frametype, 4-5 - Internal SPC voltage
+	{ 0x11, 0xAF, 0x00, 0x2D, 0x00, 0x00, 0x11 },
+	// 1-4 - Latitude, 5 - GPS sec
+	{ 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x12 },
+	// 1-4 - Longitude, 5 - TEMP2
+	{ 0x13, 0x00, 0x00, 0x00, 0x00, 0x00, 0x13 },
+	// 1-2 - Speed, 3-4 - Altitude, 5 - Temp1
+	{ 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x14 },
+	// 1 - Fuelgauge, 2-3 - RPM1, 4-5 - RPM2
+	{ 0x15, 0x00, 0x00, 0x00, 0x00, 0x00, 0x15 },
+	// GPS year, month, day, hour, min
+	{ 0x16, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16 },
+	// 3 - GPS signal, 4 - Temp3, 5 - Temp4
+	{ 0x17, 0x00, 0x00, 0x00, 0x00, 0x00, 0x17 },
+	// 1-2 - Voltage, 3-4 - Current
+	{ 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18 }
+};
 
 /**************************************************************************
  * MS561101BA calibration coefficients
@@ -183,7 +184,7 @@ void setup() {
 
 	// Detect number of cells - 2/3/4s
 	// see loop(), ADC conversion for ADC_U_IN
-	uint8_t voltage = (uint8_t)(read_adc(ADC_U_IN) * ADC_U_IN_FACTOR * 10);
+	uint8_t voltage = (uint8_t) (read_adc(ADC_U_IN) * ADC_U_IN_FACTOR * 10);
 	for (int i = 5; i > 0; i--) {
 		if (voltage >= i * MIN_CELL_VOLTAGE) {
 			number_of_battery_cells = i;
@@ -221,13 +222,13 @@ void loop() {
 	 */
 	value = read_adc(ADC_I_IN);
 	value = (value > zero_current_ref) ? value - zero_current_ref : 0;
-	set_current((uint16_t)(value * ADC_I_IN_FACTOR * 10));
+	set_current((uint16_t) (value * ADC_I_IN_FACTOR * 10));
 
 	/***
 	 Measure voltage.
 	 Uin value is sent to Hitec in Uin * 10 format.
 	 */
-	value = (uint8_t)(read_adc(ADC_U_IN) * ADC_U_IN_FACTOR * 10);
+	value = (uint8_t) (read_adc(ADC_U_IN) * ADC_U_IN_FACTOR * 10);
 	set_voltage(value);
 
 	/***
@@ -284,34 +285,34 @@ ISR(TWI_vect, ISR_BLOCK) {
 	static unsigned char msg_row = 0;
 	static unsigned char msg_col = 0;
 
-	switch(TWSR & 0xF8) {  // Mask prescaler bits
-		// Slave Receiver
-		case TW_SR_SLA_ACK:// addressed, returned ack
-		case TW_SR_GCALL_ACK:// addressed generally, returned ack
-		case TW_SR_ARB_LOST_SLA_ACK:// lost arbitration, returned ack
-		case TW_SR_DATA_ACK:// data received, returned ack
+	switch (TWSR & 0xF8) {  // Mask prescaler bits
+	// Slave Receiver
+	case TW_SR_SLA_ACK:		// addressed, returned ack
+	case TW_SR_GCALL_ACK:		// addressed generally, returned ack
+	case TW_SR_ARB_LOST_SLA_ACK:		// lost arbitration, returned ack
+	case TW_SR_DATA_ACK:		// data received, returned ack
 		TWCR = _BV(TWEN) | _BV(TWIE) | _BV(TWINT) | _BV(TWEA);
 		break;
-		case TW_SR_STOP:// stop or repeated start condition received
+	case TW_SR_STOP:		// stop or repeated start condition received
 		// send stop condition
 		TWCR = _BV(TWEN) | _BV(TWIE) | _BV(TWEA) | _BV(TWINT) | _BV(TWSTO);
-		while(TWCR & _BV(TWSTO))
-		;
+		while (TWCR & _BV(TWSTO))
+			;
 		// release bus
 		TWCR = _BV(TWEN) | _BV(TWIE) | _BV(TWEA) | _BV(TWINT);
 		break;
-		case TW_SR_DATA_NACK:// data received, returned nack
-		case TW_SR_GCALL_DATA_NACK:// data received generally, returned nack
+	case TW_SR_DATA_NACK:		// data received, returned nack
+	case TW_SR_GCALL_DATA_NACK:		// data received generally, returned nack
 		// nack back at master
 		TWCR = _BV(TWEN) | _BV(TWIE) | _BV(TWINT);
 		break;
 
 		// Slave Transmitter
-		case TW_ST_SLA_ACK:// addressed, returned ack
-		case TW_ST_ARB_LOST_SLA_ACK:// arbitration lost, returned ack
+	case TW_ST_SLA_ACK:		// addressed, returned ack
+	case TW_ST_ARB_LOST_SLA_ACK:		// arbitration lost, returned ack
 		msg_col = 0;
 		// transmit first byte from buffer, fall
-		case TW_ST_DATA_ACK:// byte sent, ack returned
+	case TW_ST_DATA_ACK:		// byte sent, ack returned
 		// copy data to output register
 		TWDR = data[msg_row][msg_col++];
 		// if there is more to send, ack, otherwise nack
@@ -321,22 +322,22 @@ ISR(TWI_vect, ISR_BLOCK) {
 			TWCR = _BV(TWEN) | _BV(TWIE) | _BV(TWINT);
 		}
 		break;
-		case TW_ST_DATA_NACK: 			// received nack, we are done
-		case TW_ST_LAST_DATA:// received ack, but we are done already!
-		msg_row ++;
+	case TW_ST_DATA_NACK: 			// received nack, we are done
+	case TW_ST_LAST_DATA: 			// received ack, but we are done already!
+		msg_row++;
 		msg_row %= 8;
 		// ack future responses
 		TWCR = _BV(TWEN) | _BV(TWIE) | _BV(TWINT) | _BV(TWEA);
 		break;
 
 		// All
-		case TW_NO_INFO:// no state information
+	case TW_NO_INFO: 			// no state information
 		break;
-		case TW_BUS_ERROR:// bus error, illegal stop/start
+	case TW_BUS_ERROR: 			// bus error, illegal stop/start
 		// send stop condition
 		TWCR = _BV(TWEN) | _BV(TWIE) | _BV(TWEA) | _BV(TWINT) | _BV(TWSTO);
-		while(TWCR & _BV(TWSTO))
-		;
+		while (TWCR & _BV(TWSTO))
+			;
 		break;
 	}
 }
@@ -472,8 +473,8 @@ void set_voltage(uint16_t value) {
 	Serial.print("v, ");
 #endif
 	value -= 2;	// compensate .2v
-	data[7][1] = (uint8_t)(value & 0xFF);  // lsb
-	data[7][2] = (uint8_t)(value >> 8);    // msb
+	data[7][1] = (uint8_t) (value & 0xFF);  // lsb
+	data[7][2] = (uint8_t) (value >> 8);    // msb
 }
 
 /**************************************************************************
@@ -486,8 +487,8 @@ void set_current(uint16_t value) {
 #endif
 	// calculate current in A9 units
 	uint16_t val = ((value + 114.875) * 1.441);
-	data[7][3] = (uint8_t)(val & 0xFF);	  // lsb
-	data[7][4] = (uint8_t)(val >> 8);     // msb
+	data[7][3] = (uint8_t) (val & 0xFF);	  // lsb
+	data[7][4] = (uint8_t) (val >> 8);     // msb
 }
 
 /**************************************************************************
@@ -536,16 +537,16 @@ void set_altitude(uint16_t value) {
 	Serial.print(value % 100);
 	Serial.print("m");
 #endif
-	data[3][3] = (uint8_t)(value & 0xFF);  // lsb
-	data[3][4] = (uint8_t)(value >> 8);    // msb
+	data[3][3] = (uint8_t) (value & 0xFF);  // lsb
+	data[3][4] = (uint8_t) (value >> 8);    // msb
 }
 
 /**************************************************************************
  * Set speed value in array
  **************************************************************************/
 void set_speed(uint16_t value) {
-	data[3][1] = (uint8_t)(value & 0xFF);  // lsb
-	data[3][2] = (uint8_t)(value >> 8);    // msb
+	data[3][1] = (uint8_t) (value & 0xFF);  // lsb
+	data[3][2] = (uint8_t) (value >> 8);    // msb
 }
 
 /**************************************************************************
