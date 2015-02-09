@@ -9,8 +9,9 @@ ifeq ($(shell uname),Linux)
 	PORT=/dev/ttyUSB0
 endif
 
+.PHONY: all
 
-default: build upload
+all: build upload
 
 build: htsss.hex
 
@@ -18,7 +19,7 @@ htsss.hex: htsss.elf
 	avr-objcopy -O ihex $< $@
 
 OBJECTS= # Put other objects here
-htsss.elf: htsss.cpp $(OBJECTS)
+htsss.elf: src/htsss.cpp $(OBJECTS)
 	$(CXX) $(CFLAGS) $(INCLUDE) $^ -o $@ $(LIBS)
 
 upload:
@@ -31,5 +32,9 @@ clean:
 	$(shell rm *.o 2> /dev/null)
 	@echo " done"
 
-%.o: %.cpp
+%.o: src/%.c
 	$(CXX) $< $(CFLAGS) $(INCLUDE) -c -o $@
+
+%.o: src/%.cpp
+	$(CXX) $< $(CFLAGS) $(INCLUDE) -c -o $@
+	
