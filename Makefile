@@ -1,6 +1,6 @@
 CXX=avr-gcc
-INCLUDE=-I ~/include/arduino/
-LIBS=-L ~/lib -lm -larduino
+INCLUDE=-I ~/avr-projects/include/arduino/
+LIBS=-L ~/avr-projects/lib -lm -larduino
 MCU=-mmcu=atmega328p
 CPU_SPEED=-DF_CPU=8000000UL
 CFLAGS=$(MCU) $(CPU_SPEED) -Os -w -Wl,--gc-sections -ffunction-sections -fdata-sections

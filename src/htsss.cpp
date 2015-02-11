@@ -146,7 +146,7 @@ void setup() {
 	cli();
 
 	/***
-	 * Initialise TWI (I2C bus) for SLA+R mode.
+	 * Initialize TWI (I2C bus) for SLA+R mode.
 	 */
 
 	// Hitec i2c slave address, do not respond to general calls
@@ -387,7 +387,6 @@ void reset_ms5611() {
  **************************************************************************/
 uint16_t read_ms5611_prom(uint8_t cmd) {
 	uint16_t ret;
-
 	ms5611_csb_lo();
 	spi_send(cmd);					// Send PROM READ command
 	spi_send(0x00);    				// Send 0 to read MSB
@@ -395,7 +394,6 @@ uint16_t read_ms5611_prom(uint8_t cmd) {
 	spi_send(0x00);     			// Send 0 to read LSB
 	ret |= SPDR;
 	ms5611_csb_hi();
-
 	return ret;
 }
 
@@ -410,7 +408,6 @@ uint32_t read_ms5611(uint8_t cmd) {
 	spi_send(MS5611_ADC_CONV + cmd);
 	_delay_ms(10);
 	ms5611_csb_hi();
-
 	// start reading 24 bit result
 	ms5611_csb_lo();
 	spi_send(MS5611_ADC_READ);
@@ -421,7 +418,6 @@ uint32_t read_ms5611(uint8_t cmd) {
 	spi_send(0x00);
 	ret |= SPDR;
 	ms5611_csb_hi();
-
 	return ret;
 }
 
@@ -473,8 +469,8 @@ void set_voltage(uint16_t value) {
 	Serial.print("v, ");
 #endif
 	value -= 2;	// compensate .2v
-	data[7][1] = (uint8_t) (value & 0xFF);  // lsb
-	data[7][2] = (uint8_t) (value >> 8);    // msb
+	data[7][1] = (uint8_t) (value & 0xFF);	// lsb
+	data[7][2] = (uint8_t) (value >> 8);	// msb
 }
 
 /**************************************************************************
@@ -485,10 +481,11 @@ void set_current(uint16_t value) {
 	Serial.print(value);
 	Serial.print("a, ");
 #endif
+
 	// calculate current in A9 units
 	uint16_t val = ((value + 114.875) * 1.441);
-	data[7][3] = (uint8_t) (val & 0xFF);	  // lsb
-	data[7][4] = (uint8_t) (val >> 8);     // msb
+	data[7][3] = (uint8_t) (val & 0xFF);	// lsb
+	data[7][4] = (uint8_t) (val >> 8);		// msb
 }
 
 /**************************************************************************
