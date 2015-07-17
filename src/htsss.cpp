@@ -15,16 +15,16 @@
 
  Hitec Optima 7/9 receiver - I2C
  -------------------------------
- SDA - A4
- SCL - A5
-
- Current ACS712ELC-30A - ADC
- ---------------------------
- OUT - A0      // PORTC 0bit
+ SDA(w) - A4
+ SCL(r) - A5
 
  Voltage w/ divider 1/5.3917 - ADC
  ---------------------------------
- OUT - A1      // PORTC 1bit
+ OUT - A0      // PORTC 1bit
+
+ Current ACS712ELC-30A - ADC
+ ---------------------------
+ OUT - A1      // PORTC 0bit
 
  Temperatrure LM335 - ADC
  ------------------------
@@ -33,9 +33,16 @@
  Barometer GY-63/MS561101BA - SPI
  --------------------------------
  CSB/SS - D10  // PORTB 2bit
- MOSI   - D11  // PORTB 3bit
- MISO   - D12  // PORTB 4bit
- SCK    - D13  // PORTB 5bit
+ SDA    - D11  // PORTB 3bit
+ SDO    - D12  // PORTB 4bit
+ SCL    - D13  // PORTB 5bit
+
+ Init button
+ -----------
+ OUT - D2		// PORTD 2bit
+
+ v03. - 2015-07-14
+ Added Init button, fixed U-measure
 
  v0.2 - 2015-02-08
  Added altimeter support.
@@ -52,12 +59,12 @@
 #define HITEC_I2C_ADDRESS   0x08    // Optima 7/9 talks to this slave
 #define ADC_REFERENCE (1 << 6)      // AVcc - REFS1=0, REFS0=1
 
-#define ADC_I_IN    0               // ADC channel for voltage
-#define ADC_U_IN    1               // ADC channel for current
+#define ADC_U_IN    0               // ADC channel for voltage
+#define ADC_I_IN    1               // ADC channel for current
 #define ADC_T_IN    2               // ADC channel for temperature
 
-#define MIN_CELL_VOLTAGE    32      // Min voltage per cell * 10
-#define CUT_OFF_VOLTAGE     33      // Cut-off voltage per cell * 10
+#define MIN_CELL_VOLTAGE    31      // Min voltage per cell * 10
+#define CUT_OFF_VOLTAGE     32      // Cut-off voltage per cell * 10
 #define FULL_CHARGED_CELL   41      // Max voltage per cell * 10
 
 /*
@@ -65,14 +72,14 @@
  (1/(2^10))*3.3/0.066 = 0.048828f
  (1/(2^10))*5.0/0.066 = 0.073982f
  */
-#define ADC_I_IN_FACTOR     ((1/(2^10))*5.0/0.066)
+#define ADC_I_IN_FACTOR     0.048828f
 
 /*
  ADC conversion, 10bit resolution. ADC_U_IN input is divided by 5.3917
  (3.3*5.3917)/(2^10) = 0.0173755f
  (5.0*5.3917)/(2^10) = 0.0263266f
  */
-#define ADC_U_IN_FACTOR     ((3.3*5.3917)/(2^10))
+#define ADC_U_IN_FACTOR     0.0172f
 
 /*
  GY-63/MS561101BA definitions for SPI
@@ -92,6 +99,8 @@
 #define ms5611_csb_lo() (_SFR_BYTE(PORTB) &= ~_BV(2))  // setting CSB low
 #define ms5611_csb_hi() (_SFR_BYTE(PORTB) |=  _BV(2))  // setting CSB high
 
+//#define TRACE 1
+
 uint16_t zero_current_ref = 0;
 uint16_t number_of_battery_cells = 1; /* Avoid div/0 */
 uint16_t ground_altitude = 0;
@@ -99,7 +108,7 @@ uint16_t ground_altitude = 0;
 /**************************************************************************
  * Message block, to send to Optima 7/9 by I2C
  **************************************************************************/
-char data[8][7] = {
+volatile char data[8][7] = {
 	// 1 - Frametype, 4-5 - Internal SPC voltage
 	{ 0x11, 0xAF, 0x00, 0x2D, 0x00, 0x00, 0x11 },
 	// 1-4 - Latitude, 5 - GPS sec
@@ -139,6 +148,7 @@ uint16_t read_ms5611_prom(uint8_t coef_num);
 uint32_t read_ms5611(uint8_t cmd);
 uint32_t calculate_altitude();
 
+
 /**************************************************************************
  * Called once
  **************************************************************************/
@@ -146,7 +156,7 @@ void setup() {
 	cli();
 
 	/***
-	 * Initialize TWI (I2C bus) for SLA+R mode.
+	 * Initialise TWI (I2C bus) for SLA+R mode.
 	 */
 
 	// Hitec i2c slave address, do not respond to general calls
@@ -184,7 +194,7 @@ void setup() {
 
 	// Detect number of cells - 2/3/4s
 	// see loop(), ADC conversion for ADC_U_IN
-	uint8_t voltage = (uint8_t) (read_adc(ADC_U_IN) * ADC_U_IN_FACTOR * 10);
+	uint16_t voltage = (uint16_t) (read_adc(ADC_U_IN) * ADC_U_IN_FACTOR * 10);
 	for (int i = 5; i > 0; i--) {
 		if (voltage >= i * MIN_CELL_VOLTAGE) {
 			number_of_battery_cells = i;
@@ -192,7 +202,7 @@ void setup() {
 		}
 	}
 
-	// Reset SPI, read calibration coeficients
+	// Reset SPI, read calibration coefficients
 	reset_ms5611();
 	C1 = read_ms5611_prom(MS5611_PROM_READ);
 	C2 = read_ms5611_prom(MS5611_PROM_READ + 2);
@@ -204,7 +214,6 @@ void setup() {
 	// Read initial altitude
 	ground_altitude = calculate_altitude();
 
-#define TRACE 1
 #ifdef TRACE
 	Serial.begin(115200);
 #endif
@@ -214,7 +223,7 @@ void setup() {
  * Perform slow operations here, anything else handled by ISRs
  **************************************************************************/
 void loop() {
-	uint16_t value; // Temprary values
+	uint16_t value; // Temporary values
 
 	/***
 	 Measure Current. At 0 (zero) amp this sensor gives Vcc/2.
@@ -228,7 +237,7 @@ void loop() {
 	 Measure voltage.
 	 Uin value is sent to Hitec in Uin * 10 format.
 	 */
-	value = (uint8_t) (read_adc(ADC_U_IN) * ADC_U_IN_FACTOR * 10);
+	value = read_adc(ADC_U_IN) * ADC_U_IN_FACTOR * 10;
 	set_voltage(value);
 
 	/***
@@ -260,6 +269,8 @@ void loop() {
 
 	 set_speed(100);
 	 set_altitude(1000);
+	set_rpm(1, 1200);
+	set_rpm(2, 1500);
 	 */
 
 	/***
@@ -268,9 +279,6 @@ void loop() {
 	value = calculate_altitude();
 	value = (value > ground_altitude) ? value - ground_altitude : 0;
 	set_altitude(value);
-
-	set_rpm(1, 1200);
-	set_rpm(2, 1500);
 
 #ifdef TRACE
 	Serial.println("");
@@ -346,7 +354,7 @@ ISR(TWI_vect, ISR_BLOCK) {
  * Select channel, start ADC and return value
  **************************************************************************/
 uint16_t read_adc(uint8_t ch) {
-	uint16_t value;
+	uint8_t low, high;
 	ADMUX = ADC_REFERENCE | (ch & 0x07);
 
 	// start the conversion
@@ -355,9 +363,9 @@ uint16_t read_adc(uint8_t ch) {
 	// ADSC is cleared when the conversion finishes
 	while ((ADCSRA & (1 << ADSC)))
 		;
-	value = ADCL;
-	value += (ADCH << 8);
-	return value;
+	low = ADCL;
+	high = ADCH;
+	return (high << 8) | low;
 }
 
 /**************************************************************************
@@ -387,6 +395,7 @@ void reset_ms5611() {
  **************************************************************************/
 uint16_t read_ms5611_prom(uint8_t cmd) {
 	uint16_t ret;
+
 	ms5611_csb_lo();
 	spi_send(cmd);					// Send PROM READ command
 	spi_send(0x00);    				// Send 0 to read MSB
@@ -394,6 +403,7 @@ uint16_t read_ms5611_prom(uint8_t cmd) {
 	spi_send(0x00);     			// Send 0 to read LSB
 	ret |= SPDR;
 	ms5611_csb_hi();
+
 	return ret;
 }
 
@@ -408,6 +418,7 @@ uint32_t read_ms5611(uint8_t cmd) {
 	spi_send(MS5611_ADC_CONV + cmd);
 	_delay_ms(10);
 	ms5611_csb_hi();
+
 	// start reading 24 bit result
 	ms5611_csb_lo();
 	spi_send(MS5611_ADC_READ);
@@ -418,6 +429,7 @@ uint32_t read_ms5611(uint8_t cmd) {
 	spi_send(0x00);
 	ret |= SPDR;
 	ms5611_csb_hi();
+
 	return ret;
 }
 
@@ -464,13 +476,13 @@ uint32_t calculate_altitude() {
  * Set voltage value in array
  **************************************************************************/
 void set_voltage(uint16_t value) {
-#ifdef TRACE
+#ifdef TRACE_
 	Serial.print(value);
-	Serial.print("v, ");
+	Serial.print("v ");
 #endif
 	value -= 2;	// compensate .2v
-	data[7][1] = (uint8_t) (value & 0xFF);	// lsb
-	data[7][2] = (uint8_t) (value >> 8);	// msb
+	data[7][1] = (uint8_t) (value & 0xFF);  // lsb
+	data[7][2] = (uint8_t) (value >> 8);    // msb
 }
 
 /**************************************************************************
@@ -479,22 +491,21 @@ void set_voltage(uint16_t value) {
 void set_current(uint16_t value) {
 #ifdef TRACE
 	Serial.print(value);
-	Serial.print("a, ");
+	Serial.print("a ");
 #endif
-
 	// calculate current in A9 units
 	uint16_t val = ((value + 114.875) * 1.441);
-	data[7][3] = (uint8_t) (val & 0xFF);	// lsb
-	data[7][4] = (uint8_t) (val >> 8);		// msb
+	data[7][3] = (uint8_t) (val & 0xFF);	  // lsb
+	data[7][4] = (uint8_t) (val >> 8);     // msb
 }
 
 /**************************************************************************
  * Set fuel gauge value in array
  **************************************************************************/
 void set_fuel_gauge(uint8_t value) {
-#ifdef TRACE
+#ifdef TRACE_
 	Serial.print(number_of_battery_cells);
-	Serial.print("s, gauge:");
+	Serial.print("s gauge:");
 	Serial.print((uint16_t) value);
 #endif
 	data[4][1] = value;
@@ -527,13 +538,16 @@ void set_temp(uint8_t nr, uint8_t value) {
  * Set altitude value in array
  **************************************************************************/
 void set_altitude(uint16_t value) {
-#ifdef TRACE
+#ifdef TRACE_
 	Serial.print(", altitude:");
 	Serial.print(value / 100);
 	Serial.print(".");
 	Serial.print(value % 100);
 	Serial.print("m");
 #endif
+	set_temp(1, value / 100);
+	set_rpm(1, value / 10);
+	set_rpm(2, value);
 	data[3][3] = (uint8_t) (value & 0xFF);  // lsb
 	data[3][4] = (uint8_t) (value >> 8);    // msb
 }
